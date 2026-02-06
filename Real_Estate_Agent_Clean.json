@@ -1,0 +1,818 @@
+{
+  "name": "Real_Estate_Agent_Professional",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-capture",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "429b1601-0bb3-420c-aa00-246fdc92691d",
+      "name": "Lead Capture Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1824,
+        -160
+      ],
+      "webhookId": "<WEBHOOK_ID>"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"status\": \"success\", \"message\": \"Lead captured\"}",
+        "options": {}
+      },
+      "id": "a08e67ba-74e7-474a-b997-ffcea5628a48",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -1808,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "lead_id",
+              "value": "={{ $json.email }}_{{ $now }}"
+            },
+            {
+              "name": "name",
+              "value": "={{ $json.name }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $json.email }}"
+            },
+            {
+              "name": "phone",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $json.location }}"
+            },
+            {
+              "name": "property_interest",
+              "value": "={{ $json.property_type }}"
+            },
+            {
+              "name": "budget",
+              "value": "={{ $json.budget }}"
+            },
+            {
+              "name": "timeline",
+              "value": "={{ $json.timeline }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "90177c32-00dd-4a11-b211-11625fb71ab2",
+      "name": "Set Lead Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        -1616,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiResponse = $input.first().json.output;\nlet enrichedData;\n\ntry {\n  const jsonMatch = aiResponse.match(/\\{[^}]*\\}/s);\n  if (jsonMatch) {\n    enrichedData = JSON.parse(jsonMatch[0]);\n  } else {\n    throw new Error('No JSON found');\n  }\n} catch (e) {\n  enrichedData = {\n    buyer_type: 'unknown',\n    estimated_budget_range: 'not_specified',\n    buying_timeline: 'unknown',\n    lead_quality_score: 50,\n    key_insights: 'Unable to parse AI response'\n  };\n}\n\nconst originalData = $('Set Lead Data').first().json;\n\nreturn {\n  json: {\n    ...originalData,\n    ...enrichedData,\n    enrichment_timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "78760e71-304a-4e33-8f38-8aaa346d8f8c",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1008,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.lead_quality_score }}",
+              "operation": "largerEqual",
+              "value2": 70
+            }
+          ]
+        }
+      },
+      "id": "1f305abb-0858-4c67-993f-b6884fb510e2",
+      "name": "Lead Quality Filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -784,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "<YOUR_EMAIL>",
+          "mode": "list",
+          "cachedResultName": "<YOUR_EMAIL>"
+        },
+        "start": "={{ $now.plus({days: 1}).toISO() }}",
+        "end": "={{ $now.plus({days: 1, minutes: 30}).toISO() }}",
+        "additionalFields": {
+          "description": "=Lead Details: \n- Name: {{ $('Lead Capture Webhook').item.json.body.name }}\n- Email: {{ $('Lead Capture Webhook').item.json.body.email }}\n- Phone: {{ $('Lead Capture Webhook').item.json.body.phone }}\n- Location Interest: {{ $('Lead Capture Webhook').item.json.body.location }}\n- Property Type:{{ $('Lead Capture Webhook').item.json.body.property_type }}\n- Lead Score: {{ $('Parse AI Response').item.json.lead_quality_score }}\n- Buyer Type: {{ $('Parse AI Response').item.json.buyer_type }}\n- Timeline: {{ $('Lead Capture Webhook').item.json.body.timeline }}\nKey Insights: {{ $('Parse AI Response').item.json.key_insights }}"
+        }
+      },
+      "id": "fb7fb74e-2145-4f96-aa56-664a045a108c",
+      "name": "Schedule Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        32,
+        -464
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "<GOOGLE_CALENDAR_CREDENTIAL_ID>",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "<SLACK_CHANNEL_ID>",
+          "mode": "list",
+          "cachedResultName": "<SLACK_CHANNEL_NAME>"
+        },
+        "text": "=🏠 *HIGH PRIORITY LEAD ALERT* 🏠\n\n*Lead Details:*\n• Name: {{ $('Lead Capture Webhook').item.json.body.name }}\n• Email: {{ $('Lead Capture Webhook').item.json.body.email }}\n• Phone: {{ $('Lead Capture Webhook').item.json.body.phone }}\n• Location: {{ $('Lead Capture Webhook').item.json.body.location }}\n• Property Interest: {{ $('Lead Capture Webhook').item.json.body.property_type }}\n• Lead Score: {{ $('Parse AI Response').item.json.lead_quality_score }}/100\n• Buyer Type: {{ $('Parse AI Response').item.json.buyer_type }}\n• Timeline: {{ $('Lead Capture Webhook').item.json.body.timeline }}\n\n*Key Insights:* {{ $('Parse AI Response').item.json.key_insights }}\n\n*Calendar Event:* Scheduled for tomorrow\n*Action Required:* Follow up within 2 hours!",
+        "otherOptions": {}
+      },
+      "id": "50c9af97-fe02-47a2-9418-d1dfd3ec34c6",
+      "name": "Slack Agent Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [
+        272,
+        -464
+      ],
+      "webhookId": "<SLACK_WEBHOOK_ID>",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "<SLACK_CREDENTIAL_ID>",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 24
+      },
+      "id": "0c682ee7-554d-428a-b42f-47322514dc81",
+      "name": "Wait 24 Hours",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        -528,
+        208
+      ],
+      "webhookId": "<WAIT_WEBHOOK_ID>"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Lead Data:\nName: {{ $json.body.name }}\nLocation: {{ $json.body.location }}\nProperty Interest: {{ $json.body.property_type }}\nBudget: {{ $json.body.budget }}\nTimeline: {{ $json.body.timeline }}\nPhone: {{ $json.body.phone }}\nEmail: {{ $json.body.email }}\n",
+        "options": {
+          "systemMessage": "=You are a real estate lead qualification expert. Analyze the lead data and provide enrichment in JSON format with: \n- buyer_type (investor/first_time/renter)\n- estimated_budget_range \n- buying_timeline (immediate/3months/6months/1year)\n- lead_quality_score (0-100)\n- key_insights\n\nAlways respond in valid JSON format only.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -1344,
+        -160
+      ],
+      "id": "4e48a46f-cc22-4375-b9e4-65f4429578ec",
+      "name": "AI Lead Enrichment"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Lead Details:\nName: {{ $json.body.name }}\nLocation: {{ $json.body.location }}\nProperty Interest: {{ $json.body.property_type }}\nBuyer Type: {{ $json.buyer_type }}\nTimeline: {{ $json.buying_timeline }}\nBudget Range: {{ $json.estimated_budget_range }}\nKey Insights: {{ $json.key_insights }}\n",
+        "options": {
+          "systemMessage": "=You are a professional real estate agent. Create a personalized, engaging message for a high-quality lead. Keep it conversational, mention specific details about their interest, and include a clear call-to-action to schedule a call. Maximum 150 words. Be professional but friendly."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -560,
+        -464
+      ],
+      "id": "ea581792-36bd-4077-9c5d-ad888e55eb2b",
+      "name": "AI High_Priority Message Agent"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Lead Details:\nName: {{ $('Lead Capture Webhook').item.json.body.name }}\nLocation: {{ $('Lead Capture Webhook').item.json.body.location }}\nProperty Interest: {{ $('Lead Capture Webhook').item.json.body.property_type }}\nBuyer Type:{{ $('Parse AI Response').item.json.buyer_type }}\nScore: {{ $('Parse AI Response').item.json.lead_quality_score }}\n",
+        "options": {
+          "systemMessage": "=Create a nurturing email for a medium-quality real estate lead. Be helpful, provide value, and maintain interest without being pushy. Include market insights or tips. Maximum 120 words. Focus on building relationship and trust."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -384,
+        -144
+      ],
+      "id": "ce36463c-51ed-4bbd-b164-d05dd10c69c8",
+      "name": "AI Nurture Message Agent1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Lead: {{ $json.name }}\nLocation: {{ $json.location }}\nProperty Interest: {{ $json.property_interest }}\n",
+        "options": {
+          "systemMessage": "=Create a friendly follow-up message for a real estate lead who hasn't responded. Be helpful, not pushy. Offer value like market updates or property alerts. Maximum 100 words. Show genuine interest in helping them find their dream property."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -176,
+        208
+      ],
+      "id": "6c339e8e-1fc8-4c1c-9812-22d2920c3749",
+      "name": "AI Follow up Message Agent"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Lead Analysis:\nLocation: {{ $('Lead Capture Webhook').item.json.body.location }}\nProperty Interest: {{ $('Lead Capture Webhook').item.json.body.property_type }}\nBuyer Type: {{ $('Parse AI Response').item.json.buyer_type }}\nBudget Range: {{ $('Parse AI Response').item.json.estimated_budget_range }}\nTimeline: {{ $('Lead Capture Webhook').item.json.body.timeline }}\nLead Score: {{ $('Parse AI Response').item.json.lead_quality_score }}\n",
+        "options": {
+          "systemMessage": "=You are a real estate market analyst. Provide actionable insights for an agent about this lead including: property recommendations, market trends for their area, pricing insights, and closing strategies. Be specific and data-driven. Format as bullet points. Maximum 200 words."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        544,
+        -144
+      ],
+      "id": "fd609bc4-3fdb-45f0-808a-04a9e5b538ed",
+      "name": "AI Market Insights Agent1"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Lead Capture Webhook').item.json.body.email }}",
+        "subject": "=Your {{ $('Lead Capture Webhook').item.json.body.location }} Property Search - Let's Connect!",
+        "emailType": "text",
+        "message": "=Hi {{ $('Lead Capture Webhook').item.json.body.name }},\n{{ $('AI High_Priority Message Agent').first().json.output }} \nI noticed you're looking for {{ $('Lead Capture Webhook').item.json.body.property_type }} in {{ $('Lead Capture Webhook').item.json.body.location }}Based on your timeline of {{ $('Lead Capture Webhook').item.json.body.timeline }}, I believe we can find you the perfect property within your budget range.\nHere's what I can offer:\n✅ Exclusive property listings in {{ $('Lead Capture Webhook').item.json.body.location }}\n✅ Market insights and pricing analysis\n✅ Personalized property recommendations\n✅ Free consultation call scheduled for tomorrow  I've already scheduled a 30-minute consultation call for us tomorrow. You'll receive a calendar invite shortly. \nLooking forward to helping you find your dream property! \nBest regards,\nYour Real Estate Expert\n📞 <YOUR_PHONE_NUMBER>\n📧 <YOUR_EMAIL> \nP.S. Reply to this email or call me directly - I'm here to answer all your questions!",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -208,
+        -464
+      ],
+      "id": "59d445a0-428e-4531-a3d6-f2459a49b4f2",
+      "name": "Send High Priority Email1",
+      "webhookId": "<GMAIL_WEBHOOK_ID>",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "<GMAIL_CREDENTIAL_ID>",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Lead Capture Webhook').item.json.body.email }}",
+        "subject": "={{ $('Lead Capture Webhook').item.json.body.location }} Market Update & Your Property Journey",
+        "emailType": "text",
+        "message": "=Hi {{ $('Lead Capture Webhook').item.json.body.name }},\n\n{{ $('AI Nurture Message Agent1').first().json.output }}\n\nI hope you're doing well! I wanted to share some valuable insights about the {{ $('Lead Capture Webhook').item.json.body.location }} real estate market that might interest you.\n\n🏡 Current Market Trends in {{ $('Lead Capture Webhook').item.json.body.location }}:\n• Property values have shown steady growth\n• Inventory levels are favorable for buyers\n• Interest rates remain competitive\n• Best time to buy is typically in the next 3-6 months\n\nSince you expressed interest in{{ $('Lead Capture Webhook').item.json.body.property_type }} , here are some tips:\n✅ Get pre-approved for financing early\n✅ Research neighborhood amenities\n✅ Consider future resale value\n✅ Don't rush - the right property will come\n\nI'm here to help whenever you're ready to take the next step. Whether you have questions about the market, need property recommendations, or want to discuss your timeline, feel free to reach out.\n\nWould you like me to set up property alerts for {{ $('Lead Capture Webhook').item.json.body.property_type }} in {{ $('Lead Capture Webhook').item.json.body.location }} ? I can send you new listings that match your criteria as soon as they hit the market.\n\nStay in touch,\nYour Real Estate Advisor\n📞 <YOUR_PHONE_NUMBER>\n📧 <YOUR_EMAIL>\n\nP.S. No pressure - I'm here to provide value and support your property journey at your own pace.\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        48,
+        -144
+      ],
+      "id": "f3b64ed3-0a5a-4ec8-b45a-53a9c7c103d6",
+      "name": "Send Nurture Email",
+      "webhookId": "<GMAIL_WEBHOOK_ID_2>",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "<GMAIL_CREDENTIAL_ID>",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=Quick Check-in - {{ $json.location }} Properties Update",
+        "emailType": "text",
+        "message": "=Hi {{ $json.name }},\n\n{{ $('AI Follow up Message Agent').first().json.output }}\n\nI hope you received my previous email about {{ $json.property_interest }} opportunities in {{ $json.location }}. I wanted to follow up and see if you have any questions or if there's anything specific I can help you with.\n\n🆕 What's New This Week:\n• 3 new {{ $json.property_interest }} listings in {{ $json.location }}\n• Updated market analysis for your area\n• New financing options available\n• Exclusive off-market opportunities\n\nI understand that buying property is a big decision, and I'm here to support you every step of the way - no pressure, just helpful guidance when you need it.\n\nHere's how I can help you right now:\n✅ Send you personalized property recommendations\n✅ Provide detailed market analysis for {{ $json.location }}\n✅ Connect you with trusted mortgage brokers\n✅ Schedule a no-obligation consultation call\n\nIf you're not ready to move forward right now, that's perfectly fine! I'll keep you updated with valuable market insights and new opportunities as they arise.\n\nJust reply with \"YES\" if you'd like me to send you the latest {{ $json.property_interest }} listings in {{ $json.location }}, or \"PAUSE\" if you'd prefer to hear from me less frequently.\n\nBest regards,\nYour Real Estate Partner\n📞 <YOUR_PHONE_NUMBER>\n📧 <YOUR_EMAIL>\n\nP.S. I'm always just a phone call or email away. Don't hesitate to reach out with any questions!\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        176,
+        208
+      ],
+      "id": "2f806ad6-915f-46d4-b905-dd4b14325a70",
+      "name": "Send Follow up Email",
+      "webhookId": "<GMAIL_WEBHOOK_ID_3>",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "<GMAIL_CREDENTIAL_ID>",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "<YOUR_EMAIL>",
+        "subject": "=`Lead Insights & Recommendations - {{ $('Lead Capture Webhook').item.json.body.name }}`",
+        "emailType": "text",
+        "message": "=Agent Insights for Lead: {{ $('Lead Capture Webhook').item.json.body.name }}  {{ $('AI Market Insights Agent1').first().json.output }}  --- Lead Summary:\n- Score: {{ $('Parse AI Response').item.json.lead_quality_score }}/100 - Contact:  {{ $('Lead Capture Webhook').item.json.body.email }}| {{ $('Lead Capture Webhook').item.json.body.phone }} \n- Interest:{{ $('Lead Capture Webhook').item.json.body.property_type }}  in {{ $('Lead Capture Webhook').item.json.body.location }}\n- Type:{{ $('Parse AI Response').item.json.buyer_type }} \n- Timeline:{{ $('Lead Capture Webhook').item.json.body.timeline }}\nNext Steps: Follow up within 24 hours for optimal conversion.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        864,
+        -144
+      ],
+      "id": "57b4b3fe-769c-4292-ad06-c447bd9880aa",
+      "name": "Agent Insights Email",
+      "webhookId": "<GMAIL_WEBHOOK_ID_4>",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "<GMAIL_CREDENTIAL_ID>",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1408,
+        48
+      ],
+      "id": "d97a184e-36d0-43c9-984a-173e3656121f",
+      "name": "Agent_1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "<GOOGLE_PALM_CREDENTIAL_ID>",
+          "name": "<GOOGLE_PALM_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        -256
+      ],
+      "id": "d67ceb81-fe22-434d-9542-fb259802d2b3",
+      "name": "Agent_2",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "<GOOGLE_PALM_CREDENTIAL_ID>",
+          "name": "<GOOGLE_PALM_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        512,
+        64
+      ],
+      "id": "d828026c-299c-4ef8-9c9a-e4cc16efc61e",
+      "name": "Agent_5",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "<GOOGLE_PALM_CREDENTIAL_ID>",
+          "name": "<GOOGLE_PALM_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        48
+      ],
+      "id": "6ae10dde-bab5-45dd-b043-ef6ec4d8161d",
+      "name": "Agent_3",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "<GOOGLE_PALM_CREDENTIAL_ID>",
+          "name": "<GOOGLE_PALM_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        384
+      ],
+      "id": "fbbf331c-8cd4-4b15-bd24-1a9172ed5e38",
+      "name": "Agent_4",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "<GOOGLE_PALM_CREDENTIAL_ID>",
+          "name": "<GOOGLE_PALM_CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "WEBHOOK TRIGGER NODE\n\n Purpose: \n- Captures real estate leads from forms, Facebook ads, website submissions\n- Entry point for all lead data into the qualification workflow\n",
+        "height": 320,
+        "width": 560
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2032,
+        -288
+      ],
+      "typeVersion": 1,
+      "id": "91e5b8b8-d84d-4264-ae16-e5d6ba79fed6",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "AI LEAD ENRICHMENT AGENT\n\n Purpose: \n- Analyzes raw lead data using AI to determine lead quality and buyer profile\n- Generates lead score (0-100) for qualification filtering\n- Enriches lead with buyer insights and market intelligence",
+        "height": 560,
+        "width": 816,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1456,
+        -368
+      ],
+      "typeVersion": 1,
+      "id": "2db9e9be-0cc7-46af-acb8-c6d7d9c23b52",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "📝 AI HIGH PRIORITY MESSAGE AGENT\n\n🎯 Purpose: \n- Creates personalized, urgent engagement messages for high-quality leads (70+ score)\n- Generates compelling call-to-action content for immediate follow-up\n- Tailors messaging based on lead's specific property interests and timeline\n",
+        "height": 320,
+        "width": 1088,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -624,
+        -608
+      ],
+      "typeVersion": 1,
+      "id": "ba0bc46d-c9bb-46f9-b242-86daddbc9593",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "AI NURTURE MESSAGE AGENT\nPurpose: \n- Creates relationship-building messages for medium-quality leads (50-69 score)\n- Provides value through market insights and educational content\n- Maintains engagement without being pushy or aggressive\n",
+        "height": 432,
+        "width": 912,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -464,
+        -272
+      ],
+      "typeVersion": 1,
+      "id": "b7afe32f-a94b-4459-8eaf-146bf017f740",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n                            \n\n\n\n \n\n\n\n\n\nAI FOLLOW-UP MESSAGE AGENT\n🎯 Purpose: \n- Creates gentle follow-up messages for leads who haven't responded after 24 hours\n- Re-engages prospects with fresh value and new opportunities\n- Maintains professional persistence without being annoying\n\n\n\n                                       \n\n\n",
+        "height": 432,
+        "width": 1072,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -624,
+        176
+      ],
+      "typeVersion": 1,
+      "id": "d443c6f7-a6d3-4895-a6ae-19251b0e4d6d",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": " AI MARKET INSIGHTS AGENT\n\n Purpose: \n- Provides actionable market insights and recommendations for agents\n- Analyzes lead data to suggest optimal closing strategies\n- Generates data-driven property recommendations and pricing insights\n",
+        "height": 544,
+        "width": 768,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        480,
+        -352
+      ],
+      "typeVersion": 1,
+      "id": "6ed4b84b-62d7-4b27-b9be-b424d9804596",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "Webhook Response\n",
+        "width": 976,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2144,
+        256
+      ],
+      "typeVersion": 1,
+      "id": "cd12f9bf-1469-4c41-9319-707a0f81041d",
+      "name": "Sticky Note6"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Lead Capture Webhook": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Lead Data": {
+      "main": [
+        [
+          {
+            "node": "AI Lead Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Lead Quality Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Quality Filter": {
+      "main": [
+        [
+          {
+            "node": "AI High_Priority Message Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 24 Hours",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Nurture Message Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Slack Agent Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Agent Notification": {
+      "main": [
+        [
+          {
+            "node": "AI Market Insights Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 24 Hours": {
+      "main": [
+        [
+          {
+            "node": "AI Follow up Message Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Lead Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI High_Priority Message Agent": {
+      "main": [
+        [
+          {
+            "node": "Send High Priority Email1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Nurture Message Agent1": {
+      "main": [
+        [
+          {
+            "node": "Send Nurture Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Follow up Message Agent": {
+      "main": [
+        [
+          {
+            "node": "Send Follow up Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Market Insights Agent1": {
+      "main": [
+        [
+          {
+            "node": "Agent Insights Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send High Priority Email1": {
+      "main": [
+        [
+          {
+            "node": "Schedule Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Nurture Email": {
+      "main": [
+        [
+          {
+            "node": "AI Market Insights Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent_1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Lead Enrichment",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent_2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI High_Priority Message Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent_5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Market Insights Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent_3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Nurture Message Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent_4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Follow up Message Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "<VERSION_ID>",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "<INSTANCE_ID>"
+  },
+  "id": "<WORKFLOW_ID>",
+  "tags": []
+}
